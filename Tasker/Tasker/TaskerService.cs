@@ -51,7 +51,7 @@ namespace Tasker
                     _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Single(rfs =>
                         rfs.RfData == received.RfReceived.Data);
 
-                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.SwitchLightAsync(device); });
+                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.SwitchDeviceAsync(device); });
             });
 
 
@@ -65,7 +65,7 @@ namespace Tasker
                     _deviceConfig.OnSwitches.TasmotaRfSwitches.Single(rfs =>
                         rfs.RfData == received.RfReceived.Data);
 
-                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnLightOnAsync(device); });
+                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnDeviceOnAsync(device); });
             });
 
             var turnOffSwitchMessages = rfMessages.Where(rfMessage =>
@@ -77,7 +77,7 @@ namespace Tasker
                     _deviceConfig.OffSwitches.TasmotaRfSwitches.Single(rfs =>
                         rfs.RfData == received.RfReceived.Data);
 
-                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnLightOffAsync(device); });
+                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnDeviceOffAsync(device); });
             });
         }
 
