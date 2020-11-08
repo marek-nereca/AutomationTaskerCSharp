@@ -1,16 +1,10 @@
 using System;
 using System.Linq;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
-using MQTTnet;
-using MQTTnet.Client.Options;
-using MQTTnet.Extensions.ManagedClient;
 using Newtonsoft.Json;
-using Q42.HueApi;
 using Tasker.Models;
 
 namespace Tasker
@@ -19,41 +13,26 @@ namespace Tasker
     {
         private readonly DeviceConfig _deviceConfig;
 
-        public TaskerService(DeviceConfig deviceConfig)
+        private readonly IHueClient _hueClient;
+
+        private readonly IMqttClient _mqttClient;
+
+        public TaskerService(DeviceConfig deviceConfig, IHueClient hueClient, IMqttClient mqttClient)
         {
             _deviceConfig = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
+            _hueClient = hueClient ?? throw new ArgumentNullException(nameof(hueClient));
+            _mqttClient = mqttClient ?? throw new ArgumentNullException(nameof(mqttClient));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var mqttServerHost = _deviceConfig.MqttBroker.Host;
-            var mqttClient = await CreateMqttClient(mqttServerHost);
-            var messagesRaw = new Subject<MqttApplicationMessageReceivedEventArgs>();
-            mqttClient.UseApplicationMessageReceivedHandler(eventArgs => { messagesRaw.OnNext(eventArgs); });
-
-            var messagesString = messagesRaw.SelectMany(mr => Observable.Return(new MqttStringMessage
-            {
-                Topic = mr.ApplicationMessage.Topic,
-                Payload = Encoding.UTF8.GetString(mr.ApplicationMessage.Payload)
-            }));
-
-            messagesString.Subscribe(message =>
-            {
-                Console.WriteLine(message.Topic);
-                Console.WriteLine(message.Payload);
-            });
-
-            var rfMessages = messagesString.Where(message => message.Topic == "tasmota/tele/sonoff/RESULT").SelectMany(
+            var messages = await _mqttClient.CreateMessageStreamAsync(stoppingToken);
+            
+            var rfMessages = messages.Where(message => message.Topic == "tasmota/tele/sonoff/RESULT").SelectMany(
                 message =>
                     Observable.Return(JsonConvert.DeserializeObject<TasmotaRfMessage>(message.Payload)));
 
             rfMessages.Subscribe(rf => { Console.WriteLine(rf.RfReceived.Data); });
-
-            var hueDefinitions = _deviceConfig.HueBridges.Select(hueBridge => new
-            {
-                HueBridge = hueBridge,
-                HueClient = new LocalHueClient(hueBridge.Host, hueBridge.User)
-            }).ToArray();
 
             var simpleSwitchMessages = rfMessages.Where(rfMessage =>
                 _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
@@ -67,18 +46,7 @@ namespace Tasker
 
                 rfSwitch.HueDevices.ToList().ForEach(async device =>
                 {
-                    var hueDefinition = hueDefinitions.Single(hd => hd.HueBridge.Name == device.BridgeName);
-
-                    var light = await hueDefinition.HueClient.GetLightAsync(device.LightId.ToString());
-                    if (light == null)
-                    {
-                        throw new InvalidOperationException($"Light with id [{device.LightId}] on bridge [{device.BridgeName}] with host [{hueDefinition.HueBridge.Host}] does not exists.");
-                    }
-                    var cmd = new LightCommand()
-                    {
-                        On = !light.State.On
-                    };
-                    await hueDefinition.HueClient.SendCommandAsync(cmd, new []{device.LightId.ToString()});
+                    await _hueClient.SwitchLightAsync(device);
                 });
             });
             
@@ -95,12 +63,7 @@ namespace Tasker
 
                 rfSwitch.HueDevices.ToList().ForEach(async device =>
                 {
-                    var hueDefinition = hueDefinitions.Single(hd => hd.HueBridge.Name == device.BridgeName);
-                    var cmd = new LightCommand()
-                    {
-                        On = true
-                    };
-                    await hueDefinition.HueClient.SendCommandAsync(cmd, new []{device.LightId.ToString()});
+                    await _hueClient.TurnLightOnAsync(device);
                 });
             });
             
@@ -115,26 +78,9 @@ namespace Tasker
 
                 rfSwitch.HueDevices.ToList().ForEach(async device =>
                 {
-                    var hueDefinition = hueDefinitions.Single(hd => hd.HueBridge.Name == device.BridgeName);
-                    var cmd = new LightCommand()
-                    {
-                        On = false
-                    };
-                    await hueDefinition.HueClient.SendCommandAsync(cmd, new []{device.LightId.ToString()});
+                    await _hueClient.TurnLightOffAsync(device);
                 });
             });
-        }
-
-        private static async Task<IManagedMqttClient> CreateMqttClient(string mqttServerHost)
-        {
-            var opt = new ManagedMqttClientOptionsBuilder().WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
-                .WithClientOptions(
-                    new MqttClientOptionsBuilder().WithClientId("csharpTasker").WithTcpServer(mqttServerHost).Build()
-                ).Build();
-            var mqttClient = new MqttFactory().CreateManagedMqttClient();
-            await mqttClient.SubscribeAsync("#");
-            await mqttClient.StartAsync(opt);
-            return mqttClient;
         }
     }
 }

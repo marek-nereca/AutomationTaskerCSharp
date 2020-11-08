@@ -1,16 +1,7 @@
-﻿using System;
-using System.Reactive.Linq;
-using System.Reactive.Subjects;
-using System.Text;
-using System.Text.Unicode;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using MQTTnet;
-using MQTTnet.Client.Options;
-using MQTTnet.Extensions.ManagedClient;
-using Newtonsoft.Json;
 using Tasker.Models;
 
 namespace Tasker
@@ -32,10 +23,7 @@ namespace Tasker
                 }))
                 .ConfigureServices((hostContext, services) =>
                 {
-                    var deviceConfig = new DeviceConfig();
-                    hostContext.Configuration.GetSection(nameof(DeviceConfig)).Bind(deviceConfig);
-                    services.AddSingleton(deviceConfig);
-                    
+                    services.RegisterDI(hostContext.Configuration);
                     services.AddHostedService<TaskerService>();
                 });
 
