@@ -365,8 +365,9 @@ MigrationBackup/
 launch.json
 tasks.json
 
-# Devel appsetings
+# appsetings
 appsettings.development.json
+appsettings.production.json
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
