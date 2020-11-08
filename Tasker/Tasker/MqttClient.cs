@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using MQTTnet;
 using MQTTnet.Client.Options;
 using MQTTnet.Extensions.ManagedClient;
+using Serilog;
 using Tasker.Models;
 
 namespace Tasker
@@ -14,10 +15,12 @@ namespace Tasker
     public class MqttClient : IMqttClient
     {
         private readonly DeviceConfig _deviceConfig;
+        private readonly ILogger _log;
 
-        public MqttClient(DeviceConfig deviceConfig)
+        public MqttClient(DeviceConfig deviceConfig, ILogger log)
         {
-            _deviceConfig = deviceConfig;
+            _deviceConfig = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
+            _log = log ?? throw new ArgumentNullException(nameof(log));
         }
 
         public async Task<IObservable<MqttStringMessage>> CreateMessageStreamAsync(CancellationToken token)
@@ -34,8 +37,7 @@ namespace Tasker
 
             var logSubscription = messages.Subscribe(message =>
             {
-                Console.WriteLine(message.Topic);
-                Console.WriteLine(message.Payload);
+                _log.Debug("Mqtt received {@message}", message);
             });
             
             token.Register(async () =>

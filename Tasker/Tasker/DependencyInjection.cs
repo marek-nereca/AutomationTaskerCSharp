@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
 using Tasker.Models;
 
 namespace Tasker
@@ -10,8 +11,13 @@ namespace Tasker
         {
             var deviceConfig = new DeviceConfig();
             configuration.GetSection(nameof(DeviceConfig)).Bind(deviceConfig);
-
             services.AddSingleton(deviceConfig);
+            
+            Log.Logger = new LoggerConfiguration()
+                .WriteTo.Console()
+                .CreateLogger();
+            services.AddSingleton(Log.Logger);
+            
             services.AddSingleton<IHueClient, HueClient>();
             services.AddSingleton<IMqttClient, MqttClient>();
         }

@@ -358,8 +358,12 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 
-# Rider
+# Idea/Rider
 .idea/
+
+# VSCode
+launch.json
+tasks.json
 
 # Devel appsetings
 appsettings.development.json
