@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Q42.HueApi;
+using Serilog;
 using Tasker.Models;
 
 namespace Tasker
@@ -14,10 +15,13 @@ namespace Tasker
             public LocalHueClient HueClient { get; set; }
         }
 
-        private HueDefinition[] _hueDefinitions;
+        private readonly HueDefinition[] _hueDefinitions;
 
-        public HueClient(DeviceConfig deviceConfig)
+        private ILogger _log;
+
+        public HueClient(DeviceConfig deviceConfig, ILogger log)
         {
+            _log = log ?? throw new ArgumentNullException(nameof(log));
             _hueDefinitions = deviceConfig.HueBridges.Select(hueBridge => new HueDefinition
             {
                 HueBridge = hueBridge,
@@ -32,6 +36,8 @@ namespace Tasker
             {
                 On = true
             };
+            
+            _log.Information("Turning on {@device}", device);
             if (device.IsGroup)
             {
                 await hueDefinition.HueClient.SendGroupCommandAsync(cmd, device.Id.ToString());
@@ -49,6 +55,8 @@ namespace Tasker
             {
                 On = false
             };
+            
+            _log.Information("Turning off {@device}", device);
             if (device.IsGroup)
             {
                 await hueDefinition.HueClient.SendGroupCommandAsync(cmd, device.Id.ToString());
@@ -86,6 +94,8 @@ namespace Tasker
             {
                 On = !light.State.On
             };
+            
+            _log.Information("Switching state {on} to {@device}", cmd.On, device);
             await hueDefinition.HueClient.SendCommandAsync(cmd, new[] {device.Id.ToString()});
         }
 
@@ -102,6 +112,8 @@ namespace Tasker
             {
                 On = !group.State.AnyOn
             };
+            
+            _log.Information("Switching state {on} to {@device}", cmd.On, device);
             await hueDefinition.HueClient.SendGroupCommandAsync(cmd, device.Id.ToString());
         }
     }

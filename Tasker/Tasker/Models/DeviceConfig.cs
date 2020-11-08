@@ -7,7 +7,7 @@ namespace Tasker.Models
         
         public Switches SimpleSwitches { get; set; }
         
-        public Switches OnSwitches { get; set; }
+        public TurnOnSwitches OnSwitches { get; set; }
         
         public Switches OffSwitches { get; set; }
     }

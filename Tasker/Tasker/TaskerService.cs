@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
+using MQTTnet.Internal;
 using Newtonsoft.Json;
 using Serilog;
 using Tasker.Models;
@@ -22,12 +23,15 @@ namespace Tasker
         
         private readonly ILogger _log;
 
-        public TaskerService(DeviceConfig deviceConfig, IHueClient hueClient, IMqttClient mqttClient, ILogger log)
+        private ActionScheduler _actionScheduler;
+
+        public TaskerService(DeviceConfig deviceConfig, IHueClient hueClient, IMqttClient mqttClient, ILogger log, ActionScheduler actionScheduler)
         {
             _deviceConfig = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
             _hueClient = hueClient ?? throw new ArgumentNullException(nameof(hueClient));
             _mqttClient = mqttClient ?? throw new ArgumentNullException(nameof(mqttClient));
             _log = log ?? throw new ArgumentNullException(nameof(log));
+            _actionScheduler = actionScheduler ?? throw new ArgumentNullException(nameof(actionScheduler));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -65,7 +69,20 @@ namespace Tasker
                     _deviceConfig.OnSwitches.TasmotaRfSwitches.Single(rfs =>
                         rfs.RfData == received.RfReceived.Data);
 
-                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnDeviceOnAsync(device); });
+                rfSwitch.HueDevices.ToList().ForEach(async device =>
+                {
+                    await _hueClient.TurnDeviceOnAsync(device);
+                    if (rfSwitch.TurnOffDelay > 0)
+                    {
+                        var task = _actionScheduler.RegisterAction($"turnOff_{device.BridgeName}_{device.Id}_{device.IsGroup}",
+                            async () =>
+                            {
+                                await _hueClient.TurnDeviceOffAsync(device);
+                            }, TimeSpan.FromMilliseconds(rfSwitch.TurnOffDelay), stoppingToken);
+                        
+                        task.Forget();
+                    }
+                });
             });
 
             var turnOffSwitchMessages = rfMessages.Where(rfMessage =>
@@ -80,7 +97,6 @@ namespace Tasker
                 rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnDeviceOffAsync(device); });
             });
         }
-
 
         private static IObservable<TasmotaRfMessage> SelectRfMessages(IObservable<MqttStringMessage> messages)
         {

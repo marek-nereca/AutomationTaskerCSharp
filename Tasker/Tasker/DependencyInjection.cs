@@ -17,7 +17,8 @@ namespace Tasker
                 .WriteTo.Console()
                 .CreateLogger();
             services.AddSingleton(Log.Logger);
-            
+
+            services.AddSingleton<ActionScheduler>();
             services.AddSingleton<IHueClient, HueClient>();
             services.AddSingleton<IMqttClient, MqttClient>();
         }
