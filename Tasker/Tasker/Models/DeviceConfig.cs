@@ -5,6 +5,8 @@ namespace Tasker.Models
         public HueBridge[] HueBridges { get; set; }
         public MqttBroker MqttBroker { get; set; }
         
+        public HueSensorUpdater HueSensorUpdater { get; set; }
+        
         public Switches SimpleSwitches { get; set; }
         
         public TurnOnSwitches OnSwitches { get; set; }

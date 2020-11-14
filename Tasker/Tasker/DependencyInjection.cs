@@ -12,6 +12,8 @@ namespace Tasker
             var deviceConfig = new DeviceConfig();
             configuration.GetSection(nameof(DeviceConfig)).Bind(deviceConfig);
             services.AddSingleton(deviceConfig);
+            services.AddSingleton(deviceConfig.HueBridges);
+            services.AddSingleton(deviceConfig.HueSensorUpdater);
             
             Log.Logger = new LoggerConfiguration()
                 .WriteTo.Console()
@@ -21,6 +23,7 @@ namespace Tasker
             services.AddSingleton<ActionScheduler>();
             services.AddSingleton<IHueClient, HueClient>();
             services.AddSingleton<IMqttClient, MqttClient>();
+            services.AddSingleton<ISensorStateUpdater, SensorStateUpdater>();
         }
     }
 }

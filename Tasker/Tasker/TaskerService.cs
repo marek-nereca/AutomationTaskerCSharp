@@ -4,7 +4,6 @@ using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
-using MQTTnet.Internal;
 using Newtonsoft.Json;
 using Serilog;
 using Tasker.Models;
@@ -14,101 +13,113 @@ namespace Tasker
     public class TaskerService : BackgroundService
     {
         private const string RfTopic = "tasmota/tele/sonoff/RESULT";
-        
+
         private readonly DeviceConfig _deviceConfig;
 
         private readonly IHueClient _hueClient;
 
         private readonly IMqttClient _mqttClient;
-        
+
+        private readonly ISensorStateUpdater _sensorStateUpdater;
+
         private readonly ILogger _log;
 
-        private ActionScheduler _actionScheduler;
+        private readonly ActionScheduler _actionScheduler;
 
-        public TaskerService(DeviceConfig deviceConfig, IHueClient hueClient, IMqttClient mqttClient, ILogger log, ActionScheduler actionScheduler)
+        public TaskerService(DeviceConfig deviceConfig, IHueClient hueClient, IMqttClient mqttClient, ILogger log,
+            ActionScheduler actionScheduler, ISensorStateUpdater sensorStateUpdater)
         {
             _deviceConfig = deviceConfig ?? throw new ArgumentNullException(nameof(deviceConfig));
             _hueClient = hueClient ?? throw new ArgumentNullException(nameof(hueClient));
             _mqttClient = mqttClient ?? throw new ArgumentNullException(nameof(mqttClient));
             _log = log ?? throw new ArgumentNullException(nameof(log));
             _actionScheduler = actionScheduler ?? throw new ArgumentNullException(nameof(actionScheduler));
+            _sensorStateUpdater = sensorStateUpdater ?? throw new ArgumentNullException(nameof(sensorStateUpdater));
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _sensorStateUpdater.Start(stoppingToken);
+            var sensorStates = _sensorStateUpdater.CreateObservableDataStream();
             var messages = await _mqttClient.CreateMessageStreamAsync(stoppingToken);
 
-            var rfMessages = SelectRfMessages(messages);
+            var messagesWithState = messages.Zip(sensorStates.MostRecent(new SensorState()),
+                (message, state) => new MqttStringMessageWithState
+                {
+                    Message = message,
+                    SensorState = state
+                });
+            
+            var rfMessagesWithState = SelectRfMessages(messagesWithState);
 
-            rfMessages.Subscribe(rf =>
-            {
-                _log.Information("Rf Message received {@message}", rf.RfReceived);
-            });
+            rfMessagesWithState.Subscribe(rf => { _log.Information("Rf Message received {@message}", rf); });
 
-            var simpleSwitchMessages = rfMessages.Where(rfMessage =>
+            var simpleSwitchMessages = rfMessagesWithState.Where(rfMessage =>
                 _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
-                    .Contains(rfMessage.RfReceived.Data));
+                    .Contains(rfMessage.Message.RfReceived.Data));
 
             simpleSwitchMessages.Subscribe(received =>
             {
                 var rfSwitch =
                     _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Single(rfs =>
-                        rfs.RfData == received.RfReceived.Data);
+                        rfs.RfData == received.Message.RfReceived.Data);
 
                 rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.SwitchDeviceAsync(device); });
             });
 
 
-            var turnOnSwitchMessages = rfMessages.Where(rfMessage =>
+            var turnOnSwitchMessages = rfMessagesWithState.Where(rfMessage =>
                 _deviceConfig.OnSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
-                    .Contains(rfMessage.RfReceived.Data));
+                    .Contains(rfMessage.Message.RfReceived.Data));
 
             turnOnSwitchMessages.Subscribe(received =>
             {
                 var rfSwitch =
                     _deviceConfig.OnSwitches.TasmotaRfSwitches.Single(rfs =>
-                        rfs.RfData == received.RfReceived.Data);
+                        rfs.RfData == received.Message.RfReceived.Data);
 
                 rfSwitch.HueDevices.ToList().ForEach(async device =>
                 {
                     await _hueClient.TurnDeviceOnAsync(device);
                     if (rfSwitch.TurnOffDelay > 0)
                     {
-                        var task = _actionScheduler.RegisterAction($"turnOff_{device.BridgeName}_{device.Id}_{device.IsGroup}",
-                            async () =>
-                            {
-                                await _hueClient.TurnDeviceOffAsync(device);
-                            }, TimeSpan.FromMilliseconds(rfSwitch.TurnOffDelay), stoppingToken);
-                        
+                        var task = _actionScheduler.RegisterAction(
+                            $"turnOff_{device.BridgeName}_{device.Id}_{device.IsGroup}",
+                            async () => { await _hueClient.TurnDeviceOffAsync(device); },
+                            TimeSpan.FromMilliseconds(rfSwitch.TurnOffDelay), stoppingToken);
+
                         task.Forget();
                     }
                 });
             });
 
-            var turnOffSwitchMessages = rfMessages.Where(rfMessage =>
+            var turnOffSwitchMessages = rfMessagesWithState.Where(rfMessage =>
                 _deviceConfig.OffSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
-                    .Contains(rfMessage.RfReceived.Data));
+                    .Contains(rfMessage.Message.RfReceived.Data));
             turnOffSwitchMessages.Subscribe(received =>
             {
                 var rfSwitch =
                     _deviceConfig.OffSwitches.TasmotaRfSwitches.Single(rfs =>
-                        rfs.RfData == received.RfReceived.Data);
+                        rfs.RfData == received.Message.RfReceived.Data);
 
                 rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.TurnDeviceOffAsync(device); });
             });
         }
 
-        private static IObservable<TasmotaRfMessage> SelectRfMessages(IObservable<MqttStringMessage> messages)
+        private static IObservable<TasmotaRfMessageWithState> SelectRfMessages(IObservable<MqttStringMessageWithState> messages)
         {
-            var rfMessages = messages.Where(message => message.Topic == RfTopic).SelectMany(
+            var rfMessages = messages.Where(msgWrapper => msgWrapper.Message.Topic == RfTopic).SelectMany(
                 message =>
-                    Observable.Return(JsonConvert.DeserializeObject<TasmotaRfMessage>(message.Payload)));
+                    Observable.Return(new TasmotaRfMessageWithState {
+                        Message = JsonConvert.DeserializeObject<TasmotaRfMessage>(message.Message.Payload),
+                        SensorState = message.SensorState
+                    }));
             return rfMessages;
         }
-        
-        private static IObservable<MqttStringMessage> SelectMqMessages(IObservable<MqttStringMessage> messages)
+
+        private static IObservable<MqttStringMessageWithState> SelectMqMessages(IObservable<MqttStringMessageWithState> messages)
         {
-            var mqMessages = messages.Where(message => message.Topic != RfTopic);
+            var mqMessages = messages.Where(msgWrapper => msgWrapper.Message.Topic != RfTopic);
             return mqMessages;
         }
     }
