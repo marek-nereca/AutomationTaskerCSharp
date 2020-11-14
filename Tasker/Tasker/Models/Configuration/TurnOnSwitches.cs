@@ -1,4 +1,4 @@
-namespace Tasker.Models
+namespace Tasker.Models.Configuration
 {
     public class TurnOnSwitches
     {

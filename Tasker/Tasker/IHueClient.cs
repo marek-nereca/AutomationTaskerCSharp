@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Tasker.Models;
+using Tasker.Models.Configuration;
 
 namespace Tasker
 {

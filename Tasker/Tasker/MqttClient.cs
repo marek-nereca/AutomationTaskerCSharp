@@ -9,6 +9,7 @@ using MQTTnet.Client.Options;
 using MQTTnet.Extensions.ManagedClient;
 using Serilog;
 using Tasker.Models;
+using Tasker.Models.Configuration;
 
 namespace Tasker
 {

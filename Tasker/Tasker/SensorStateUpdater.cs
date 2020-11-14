@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Q42.HueApi;
 using Serilog;
 using Tasker.Models;
+using Tasker.Models.Configuration;
 
 namespace Tasker
 {

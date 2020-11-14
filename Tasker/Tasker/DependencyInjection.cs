@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
-using Tasker.Models;
+using Tasker.Models.Configuration;
 
 namespace Tasker
 {

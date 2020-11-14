@@ -1,3 +1,5 @@
+using Tasker.Models.Configuration;
+
 namespace Tasker.Models
 {
     public class TasmotaRfMessage

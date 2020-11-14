@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Serilog;
 using Tasker.Models;
+using Tasker.Models.Configuration;
 
 namespace Tasker
 {
@@ -51,22 +52,22 @@ namespace Tasker
                 });
             
             var rfMessagesWithState = SelectRfMessages(messagesWithState);
-
             rfMessagesWithState.Subscribe(rf => { _log.Information("Rf Message received {@message}", rf); });
 
-            var simpleSwitchMessages = rfMessagesWithState.Where(rfMessage =>
-                _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
-                    .Contains(rfMessage.Message.RfReceived.Data));
+            var mqMessagesWithState = SelectMqMessages(messagesWithState);
+            mqMessagesWithState.Subscribe(mq => { _log.Information("Mq message received {@message}", mq); });
 
-            simpleSwitchMessages.Subscribe(received =>
+            var hueDevicesToSwitchMq = mqMessagesWithState.SelectMany(mq =>
+                _deviceConfig.SimpleSwitches.MqttSwitches.Where(mqSwitch => mqSwitch.Topic == mq.Message.Topic).SelectMany(mqSwitch => mqSwitch.HueDevices));
+            var hueDevicesToSwitchRf = rfMessagesWithState.SelectMany(rf =>
+                _deviceConfig.SimpleSwitches.TasmotaRfSwitches
+                    .Where(rfSwitch => rfSwitch.RfData == rf.Message.RfReceived.Data)
+                    .SelectMany(rfSwitch => rfSwitch.HueDevices));
+            var hueDevicesToSwitch = hueDevicesToSwitchMq.Merge(hueDevicesToSwitchRf);
+            hueDevicesToSwitch.Subscribe(async hueDevice =>
             {
-                var rfSwitch =
-                    _deviceConfig.SimpleSwitches.TasmotaRfSwitches.Single(rfs =>
-                        rfs.RfData == received.Message.RfReceived.Data);
-
-                rfSwitch.HueDevices.ToList().ForEach(async device => { await _hueClient.SwitchDeviceAsync(device); });
+                await _hueClient.SwitchDeviceAsync(hueDevice);
             });
-
 
             var turnOnSwitchMessages = rfMessagesWithState.Where(rfMessage =>
                 _deviceConfig.OnSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
