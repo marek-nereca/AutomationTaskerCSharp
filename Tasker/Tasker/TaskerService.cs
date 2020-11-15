@@ -69,16 +69,14 @@ namespace Tasker
                 await _hueClient.SwitchDeviceAsync(hueDevice);
             });
 
-            var turnOnSwitchMessages = rfMessagesWithState.Where(rfMessage =>
-                _deviceConfig.OnSwitches.TasmotaRfSwitches.Select(rfSwitch => rfSwitch.RfData)
-                    .Contains(rfMessage.Message.RfReceived.Data));
+            var turnOnSwitches = rfMessagesWithState.SelectMany(rfm =>
+                _deviceConfig.OnSwitches.TasmotaRfSwitches.Where(rfSwitch =>
+                    rfm.Message.RfReceived.Data == rfSwitch.RfData &&
+                    (!rfSwitch.OnlyWhenIsDark || rfm.SensorState.IsDark) &&
+                    (!rfSwitch.OnlyWhenIsNight || !rfm.SensorState.IsDayLight)));
 
-            turnOnSwitchMessages.Subscribe(received =>
+            turnOnSwitches.Subscribe(rfSwitch =>
             {
-                var rfSwitch =
-                    _deviceConfig.OnSwitches.TasmotaRfSwitches.Single(rfs =>
-                        rfs.RfData == received.Message.RfReceived.Data);
-
                 rfSwitch.HueDevices.ToList().ForEach(async device =>
                 {
                     await _hueClient.TurnDeviceOnAsync(device);
