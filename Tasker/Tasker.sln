@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tasker", "Tasker\Tasker.csproj", "{F3FCC188-B39B-4C5E-999C-7110F299F756}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tasker.Tests", "Tasker.Tests\Tasker.Tests.csproj", "{288226FF-A1E4-4AA7-A6F0-19C7AC8B4CD2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{F3FCC188-B39B-4C5E-999C-7110F299F756}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F3FCC188-B39B-4C5E-999C-7110F299F756}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F3FCC188-B39B-4C5E-999C-7110F299F756}.Release|Any CPU.Build.0 = Release|Any CPU
+		{288226FF-A1E4-4AA7-A6F0-19C7AC8B4CD2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{288226FF-A1E4-4AA7-A6F0-19C7AC8B4CD2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{288226FF-A1E4-4AA7-A6F0-19C7AC8B4CD2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{288226FF-A1E4-4AA7-A6F0-19C7AC8B4CD2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

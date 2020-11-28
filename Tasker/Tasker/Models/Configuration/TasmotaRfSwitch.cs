@@ -4,6 +4,6 @@ namespace Tasker.Models.Configuration
     {
         public string? RfData { get; set; }
         
-        public HueDevice[]? HueDevices { get; set; }
+        public HueDevice[] HueDevices { get; set; } = new HueDevice[0];
     }
 }

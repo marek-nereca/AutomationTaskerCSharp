@@ -21,6 +21,7 @@ namespace Tasker
             services.AddSingleton(Log.Logger);
 
             services.AddSingleton<ActionScheduler>();
+            services.AddSingleton<MessageProcessor>();
             services.AddSingleton<IHueClient, HueClient>();
             services.AddSingleton<IMqttClient, MqttClient>();
             services.AddSingleton<ISensorStateUpdater, SensorStateUpdater>();

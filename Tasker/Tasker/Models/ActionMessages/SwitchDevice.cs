@@ -10,7 +10,7 @@ namespace Tasker.Models.ActionMessages
         {
             HueDevice = hueDevice;
         }
-        
+
         public void Process(IActionProcessor processor)
         {
             processor.Accept(this);
