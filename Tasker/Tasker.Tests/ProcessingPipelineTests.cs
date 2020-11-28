@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reactive.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -60,6 +63,88 @@ namespace Tasker.Tests
                             }
                         }
                     }
+                },
+                OffSwitches = new Switches
+                {
+                    MqttSwitches = new[]
+                    {
+                        new MqttSwitch
+                        {
+                            Topic = "/mqtt/off",
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 3 
+                                }
+                            }
+                        },
+                    },
+                    TasmotaRfSwitches = new[]
+                    {
+                        new TasmotaRfSwitch
+                        {
+                            RfData = "offDevid4",
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 4
+                                }
+                            }
+                        }
+                    }
+                },
+                
+                OnSwitches = new TurnOnSwitches()
+                {
+                    MqttSwitches = new[]
+                    {
+                        new MqttSwitchWithTurnOffDelay()
+                        {
+                            Topic = "/mqtt/on",
+                            TurnOffDelay = 0,
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 5 
+                                }
+                            }
+                        },
+                    },
+                    TasmotaRfSwitches = new[]
+                    {
+                        new TasmotaRfSwitchWithTurnOffDelay()
+                        {
+                            RfData = "onDevid6",
+                            TurnOffDelayMs = 0,
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 6
+                                }
+                            }
+                        },
+                        new TasmotaRfSwitchWithTurnOffDelay()
+                        {
+                            RfData = "onDevid8",
+                            TurnOffDelayMs = 100,
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 8 
+                                }
+                            }
+                        }
+                    }
                 }
             }, new ActionScheduler(Logger.None));
         }
@@ -90,6 +175,37 @@ namespace Tasker.Tests
             var switchAction = (SwitchDevice) result;
             Assert.AreEqual(1, switchAction.HueDevice.Id);
         }
+        
+        [Test]
+        public void Test_MqOffSwitch_DoesNotWorkYet()
+        {
+            MqttStringMessageWithState[] messages = new[]
+            {
+                new MqttStringMessageWithState
+                {
+                    Message = new MqttStringMessage()
+                    {
+                        Payload = "1",
+                        Topic = "/mqtt/off"
+                    },
+                    SensorState = new SensorState()
+                }
+            };
+
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token,
+                    messages.ToObservable());
+            cancellationTokenSource.Cancel();
+
+            var any = messageProcessingPipeline.ToEnumerable().Any();
+            Assert.IsFalse(any);
+
+            // var result = await messageProcessingPipeline.SingleAsync();
+            // Assert.IsInstanceOf<TurnOffDevice>(result);
+            // var offDevice = (TurnOffDevice) result;
+            // Assert.AreEqual(1, offDevice.HueDevice.Id);
+        }
 
         [Test]
         public async Task Test_RfSimpleSwitch()
@@ -117,6 +233,105 @@ namespace Tasker.Tests
             Assert.IsInstanceOf<SwitchDevice>(result);
             var switchAction = (SwitchDevice) result;
             Assert.AreEqual(2, switchAction.HueDevice.Id);
+        }
+        
+        [Test]
+        public async Task Test_RfOff()
+        {
+            MqttStringMessageWithState[] messages = new[]
+            {
+                new MqttStringMessageWithState
+                {
+                    Message = new MqttStringMessage()
+                    {
+                        Payload =
+                            "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"offDevid4\", \"RfKey\": \"None\"}}",
+                        Topic = MessageProcessor.RfTopic
+                    },
+                    SensorState = new SensorState()
+                }
+            };
+
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token,
+                    messages.ToObservable());
+            cancellationTokenSource.Cancel();
+            var result = await messageProcessingPipeline.SingleAsync();
+            Assert.IsInstanceOf<TurnOffDevice>(result);
+            var turnOffDevice = (TurnOffDevice) result;
+            Assert.AreEqual(4, turnOffDevice.HueDevice.Id);
+        }
+        
+        [Test]
+        public async Task Test_RfOn()
+        {
+            MqttStringMessageWithState[] messages = new[]
+            {
+                new MqttStringMessageWithState
+                {
+                    Message = new MqttStringMessage()
+                    {
+                        Payload =
+                            "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"onDevid6\", \"RfKey\": \"None\"}}",
+                        Topic = MessageProcessor.RfTopic
+                    },
+                    SensorState = new SensorState()
+                }
+            };
+
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token,
+                    messages.ToObservable());
+            cancellationTokenSource.Cancel();
+            var result = await messageProcessingPipeline.SingleAsync();
+            Assert.IsInstanceOf<TurnOnDevice>(result);
+            var turnOnDevice = (TurnOnDevice) result;
+            Assert.AreEqual(6, turnOnDevice.HueDevice.Id);
+        }
+        
+        [Test]
+        public async Task Test_RfOnWithDelay()
+        {
+            MqttStringMessageWithState[] messages = new[]
+            {
+                new MqttStringMessageWithState
+                {
+                    Message = new MqttStringMessage()
+                    {
+                        Payload =
+                            "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"onDevid8\", \"RfKey\": \"None\"}}",
+                        Topic = MessageProcessor.RfTopic
+                    },
+                    SensorState = new SensorState()
+                }
+            };
+
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token,
+                    messages.ToObservable());
+            List<(IActionMessage, DateTime)> received = new List<(IActionMessage, DateTime)>();
+            messageProcessingPipeline.Subscribe(action =>
+            {
+                var actionAndTime = (action, DateTime.UtcNow);
+                received.Add(actionAndTime);
+            });
+            cancellationTokenSource.CancelAfter(200);
+            await messageProcessingPipeline.LastAsync();
+            
+            Assert.AreEqual(2, received.Count);
+
+            var onActionAndTime = received.First();
+            Assert.IsInstanceOf<TurnOnDevice>(onActionAndTime.Item1);
+
+            var offActionAndTime = received.Last();
+            Assert.IsInstanceOf<TurnOffDevice>(offActionAndTime.Item1);
+
+            var delay = offActionAndTime.Item2.Subtract(onActionAndTime.Item2);
+            var delta = Math.Abs(100 - delay.TotalMilliseconds);
+            Assert.Less(delta, 20);
         }
     }
 }

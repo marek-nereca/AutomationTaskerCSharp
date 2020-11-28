@@ -44,10 +44,10 @@ namespace Tasker
         {
 
             var rfMessagesWithState = SelectRfMessages(messages);
-            rfMessagesWithState.Subscribe(rf => { _log.Information("Rf Message received {@message}", rf); });
+            rfMessagesWithState.Do(rf => { _log.Information("Rf Message received {@message}", rf); });
 
             var mqMessagesWithState = SelectMqMessages(messages);
-            mqMessagesWithState.Subscribe(mq => { _log.Information("Mq message received {@message}", mq); });
+            mqMessagesWithState.Do(mq => { _log.Information("Mq message received {@message}", mq); });
 
             var switchActions = ResolveSwitchRequests(mqMessagesWithState, rfMessagesWithState);
 
@@ -84,10 +84,10 @@ namespace Tasker
             var turnOnDevices = turnOnSwitches.SelectMany(sw => sw.HueDevices);
             var turnOnActions = turnOnDevices.Select(device => new TurnOnDevice(device) as IActionMessage);
 
-            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelay > 0 && sw.HueDevices != null).SelectMany(sw =>
+            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelayMs > 0 && sw.HueDevices != null).SelectMany(sw =>
                 sw.HueDevices.Select(device => new
                 {
-                    sw.TurnOffDelay,
+                    TurnOffDelay = sw.TurnOffDelayMs,
                     Device = device
                 }));
             turnOffAfterDelay.Subscribe(definition =>
