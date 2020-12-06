@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
@@ -331,6 +332,67 @@ namespace Tasker.Tests
 
             var delay = offActionAndTime.Item2.Subtract(onActionAndTime.Item2);
             var delta = Math.Abs(100 - delay.TotalMilliseconds);
+            Assert.Less(delta, 20);
+        }
+        
+        [Test]
+        public async Task Test_RfOnWithDelay_TwoOnMessages()
+        {
+            var firstMsg = new MqttStringMessageWithState
+            {
+                Message = new MqttStringMessage()
+                {
+                    Payload =
+                        "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"onDevid8\", \"RfKey\": \"None\"}}",
+                    Topic = MessageProcessor.RfTopic
+                },
+                SensorState = new SensorState()
+            };
+            
+            var secondMsg = new MqttStringMessageWithState
+            {
+                Message = new MqttStringMessage()
+                {
+                    Payload =
+                        "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"onDevid8\", \"RfKey\": \"None\"}}",
+                    Topic = MessageProcessor.RfTopic
+                },
+                SensorState = new SensorState()
+            };
+            
+            Subject<MqttStringMessageWithState> subject = new Subject<MqttStringMessageWithState>();
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token, subject);
+            
+            List<(IActionMessage, DateTime)> received = new List<(IActionMessage, DateTime)>();
+            messageProcessingPipeline.Subscribe(action =>
+            {
+                var actionAndTime = (action, DateTime.UtcNow);
+                received.Add(actionAndTime);
+            });
+            subject.OnNext(firstMsg);
+            await Task.Delay(80);
+            subject.OnNext(secondMsg);
+            
+            subject.OnCompleted();
+            cancellationTokenSource.CancelAfter(200);
+            
+            await messageProcessingPipeline.LastAsync();
+            
+            Assert.AreEqual(3, received.Count);
+
+            var onActionAndTime = received.First();
+            Assert.IsInstanceOf<TurnOnDevice>(onActionAndTime.Item1);
+            
+            var on2ActionAndTime = received.Skip(1).First();
+            Assert.IsInstanceOf<TurnOnDevice>(on2ActionAndTime.Item1);
+
+            var offActionAndTime = received.Last();
+            Assert.IsInstanceOf<TurnOffDevice>(offActionAndTime.Item1);
+            
+            var delay = offActionAndTime.Item2.Subtract(onActionAndTime.Item2);
+            var delta = Math.Abs(180 - delay.TotalMilliseconds);
             Assert.Less(delta, 20);
         }
     }
