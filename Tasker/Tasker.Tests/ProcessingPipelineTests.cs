@@ -77,7 +77,7 @@ namespace Tasker.Tests
                                 new HueDevice
                                 {
                                     BridgeName = "testHostName",
-                                    Id = 3 
+                                    Id = 3
                                 }
                             }
                         },
@@ -98,7 +98,7 @@ namespace Tasker.Tests
                         }
                     }
                 },
-                
+
                 OnSwitches = new TurnOnSwitches()
                 {
                     MqttSwitches = new[]
@@ -112,7 +112,7 @@ namespace Tasker.Tests
                                 new HueDevice
                                 {
                                     BridgeName = "testHostName",
-                                    Id = 5 
+                                    Id = 5
                                 }
                             }
                         },
@@ -141,7 +141,21 @@ namespace Tasker.Tests
                                 new HueDevice
                                 {
                                     BridgeName = "testHostName",
-                                    Id = 8 
+                                    Id = 8
+                                }
+                            }
+                        },
+                        new TasmotaRfSwitchWithTurnOffDelay()
+                        {
+                            RfData = "onDevid10",
+                            TurnOffDelayMs = 0,
+                            OnlyWhenIsNight = true,
+                            HueDevices = new[]
+                            {
+                                new HueDevice
+                                {
+                                    BridgeName = "testHostName",
+                                    Id = 10
                                 }
                             }
                         }
@@ -176,7 +190,7 @@ namespace Tasker.Tests
             var switchAction = (SwitchDevice) result;
             Assert.AreEqual(1, switchAction.HueDevice.Id);
         }
-        
+
         [Test]
         public void Test_MqOffSwitch_DoesNotWorkYet()
         {
@@ -235,7 +249,7 @@ namespace Tasker.Tests
             var switchAction = (SwitchDevice) result;
             Assert.AreEqual(2, switchAction.HueDevice.Id);
         }
-        
+
         [Test]
         public async Task Test_RfOff()
         {
@@ -263,7 +277,7 @@ namespace Tasker.Tests
             var turnOffDevice = (TurnOffDevice) result;
             Assert.AreEqual(4, turnOffDevice.HueDevice.Id);
         }
-        
+
         [Test]
         public async Task Test_RfOn()
         {
@@ -291,7 +305,48 @@ namespace Tasker.Tests
             var turnOnDevice = (TurnOnDevice) result;
             Assert.AreEqual(6, turnOnDevice.HueDevice.Id);
         }
-        
+
+        [TestCase(true)]
+        [TestCase(false)]
+        public async Task Test_RfOn_OnlyInNight(bool isDayLight)
+        {
+            MqttStringMessageWithState[] messages = new[]
+            {
+                new MqttStringMessageWithState
+                {
+                    Message = new MqttStringMessage()
+                    {
+                        Payload =
+                            "{\"RfReceived\": {\"Sync\": 7560, \"Low\": 250, \"High\": 710, \"Data\": \"onDevid10\", \"RfKey\": \"None\"}}",
+                        Topic = MessageProcessor.RfTopic
+                    },
+                    SensorState = new SensorState
+                    {
+                        IsDayLight = isDayLight
+                    }
+                }
+            };
+
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token,
+                    messages.ToObservable());
+            cancellationTokenSource.Cancel();
+
+            if (isDayLight)
+            {
+                var result = await messageProcessingPipeline.FirstOrDefaultAsync();
+                Assert.IsNull(result);
+            }
+            else
+            {
+                var result = await messageProcessingPipeline.SingleAsync();
+                Assert.IsInstanceOf<TurnOnDevice>(result);
+                var turnOnDevice = (TurnOnDevice) result;
+                Assert.AreEqual(10, turnOnDevice.HueDevice.Id);
+            }
+        }
+
         [Test]
         public async Task Test_RfOnWithDelay()
         {
@@ -321,7 +376,7 @@ namespace Tasker.Tests
             });
             cancellationTokenSource.CancelAfter(200);
             await messageProcessingPipeline.LastAsync();
-            
+
             Assert.AreEqual(2, received.Count);
 
             var onActionAndTime = received.First();
@@ -334,7 +389,7 @@ namespace Tasker.Tests
             var delta = Math.Abs(100 - delay.TotalMilliseconds);
             Assert.Less(delta, 20);
         }
-        
+
         [Test]
         public async Task Test_RfOnWithDelay_TwoOnMessages()
         {
@@ -348,7 +403,7 @@ namespace Tasker.Tests
                 },
                 SensorState = new SensorState()
             };
-            
+
             var secondMsg = new MqttStringMessageWithState
             {
                 Message = new MqttStringMessage()
@@ -359,12 +414,12 @@ namespace Tasker.Tests
                 },
                 SensorState = new SensorState()
             };
-            
+
             Subject<MqttStringMessageWithState> subject = new Subject<MqttStringMessageWithState>();
             CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
             var messageProcessingPipeline =
                 _messageProcessor.CreateMessageProcessingPipeline(cancellationTokenSource.Token, subject);
-            
+
             List<(IActionMessage, DateTime)> received = new List<(IActionMessage, DateTime)>();
             messageProcessingPipeline.Subscribe(action =>
             {
@@ -374,23 +429,23 @@ namespace Tasker.Tests
             subject.OnNext(firstMsg);
             await Task.Delay(80);
             subject.OnNext(secondMsg);
-            
+
             subject.OnCompleted();
             cancellationTokenSource.CancelAfter(200);
-            
+
             await messageProcessingPipeline.LastAsync();
-            
+
             Assert.AreEqual(3, received.Count);
 
             var onActionAndTime = received.First();
             Assert.IsInstanceOf<TurnOnDevice>(onActionAndTime.Item1);
-            
+
             var on2ActionAndTime = received.Skip(1).First();
             Assert.IsInstanceOf<TurnOnDevice>(on2ActionAndTime.Item1);
 
             var offActionAndTime = received.Last();
             Assert.IsInstanceOf<TurnOffDevice>(offActionAndTime.Item1);
-            
+
             var delay = offActionAndTime.Item2.Subtract(onActionAndTime.Item2);
             var delta = Math.Abs(180 - delay.TotalMilliseconds);
             Assert.Less(delta, 20);

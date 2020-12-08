@@ -56,14 +56,14 @@ namespace Tasker
             
             var turnOnActions = ResolveTurnOnRequests(stoppingToken, rfMessagesWithState, turnOffActionsAfterDelay);
 
-            var turnOffActions = ResolveTurnOnRequests(rfMessagesWithState);
+            var turnOffActions = ResolveTurnOffRequests(rfMessagesWithState);
 
             var actions = turnOffActions.Merge(switchActions).Merge(turnOnActions).Merge(turnOffActionsAfterDelay);
             
             return actions;
         }
 
-        private IObservable<IActionMessage> ResolveTurnOnRequests(IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
+        private IObservable<IActionMessage> ResolveTurnOffRequests(IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
         {
             var turnOffDevices = rfMessagesWithState.SelectMany(rf =>
                 _deviceConfig.OffSwitches.TasmotaRfSwitches
@@ -80,7 +80,8 @@ namespace Tasker
                 _deviceConfig.OnSwitches.TasmotaRfSwitches.Where(rfSwitch =>
                     rfm.Message.RfReceived.Data == rfSwitch.RfData &&
                     (!rfSwitch.OnlyWhenIsDark || rfm.SensorState.IsDark) &&
-                    (!rfSwitch.OnlyWhenIsNight || !rfm.SensorState.IsDayLight)));
+                    (!rfSwitch.OnlyWhenIsNight || !rfm.SensorState.IsDayLight)
+                    ));
             var turnOnDevices = turnOnSwitches.SelectMany(sw => sw.HueDevices);
             var turnOnActions = turnOnDevices.Select(device => new TurnOnDevice(device) as IActionMessage);
 
