@@ -16,7 +16,7 @@ namespace Tasker
             services.AddSingleton(deviceConfig.HueSensorUpdater);
             
             Log.Logger = new LoggerConfiguration()
-                .WriteTo.Console()
+                .ReadFrom.Configuration(configuration)
                 .CreateLogger();
             services.AddSingleton(Log.Logger);
 
