@@ -85,7 +85,7 @@ namespace Tasker
             var turnOnDevices = turnOnSwitches.SelectMany(sw => sw.HueDevices);
             var turnOnActions = turnOnDevices.Select(device => new TurnOnDevice(device) as IActionMessage);
 
-            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelayMs > 0 && sw.HueDevices != null).SelectMany(sw =>
+            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelayMs > 0 && sw.HueDevices.Length != 0).SelectMany(sw =>
                 sw.HueDevices.Select(device => new
                 {
                     TurnOffDelay = sw.TurnOffDelayMs,

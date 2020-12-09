@@ -27,23 +27,20 @@ namespace Tasker
         public async Task<IObservable<MqttStringMessage>> CreateMessageStreamAsync(CancellationToken token)
         {
             var client = await CreateMqttClient(_deviceConfig.MqttBroker.Host);
-            var messagesRaw = new Subject<MqttApplicationMessageReceivedEventArgs>();
-            client.UseApplicationMessageReceivedHandler(eventArgs => { messagesRaw.OnNext(eventArgs); });
-
-            var messages = messagesRaw.SelectMany(mr => Observable.Return(new MqttStringMessage
+            var messages = new Subject<MqttStringMessage>();
+            client.UseApplicationMessageReceivedHandler(eventArgs =>
             {
-                Topic = mr.ApplicationMessage.Topic,
-                Payload = Encoding.UTF8.GetString(mr.ApplicationMessage.Payload)
-            }));
-
-            var logSubscription = messages.Subscribe(message =>
-            {
-                _log.Debug("Mqtt received {@message}", message);
+                var msg = new MqttStringMessage
+                {
+                    Topic = eventArgs.ApplicationMessage.Topic,
+                    Payload = Encoding.UTF8.GetString(eventArgs.ApplicationMessage.Payload)
+                };
+                _log.Debug("Mqtt received {@message}", msg);
+                messages.OnNext(msg);
             });
-            
+
             token.Register(async () =>
             {
-                logSubscription.Dispose();
                 await client.StopAsync();
                 client.Dispose();
             });
@@ -55,7 +52,11 @@ namespace Tasker
         {
             var opt = new ManagedMqttClientOptionsBuilder().WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
                 .WithClientOptions(
-                    new MqttClientOptionsBuilder().WithClientId("csharpTasker").WithTcpServer(mqttServerHost).Build()
+                    new MqttClientOptionsBuilder()
+                        .WithClientId("csharpTasker")
+                        .WithCleanSession()
+                        .WithTcpServer(mqttServerHost)
+                        .Build()
                 ).Build();
             var mqttClient = new MqttFactory().CreateManagedMqttClient();
             await mqttClient.SubscribeAsync("#");
