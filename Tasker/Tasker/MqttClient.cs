@@ -53,7 +53,6 @@ namespace Tasker
             var opt = new ManagedMqttClientOptionsBuilder().WithAutoReconnectDelay(TimeSpan.FromSeconds(5))
                 .WithClientOptions(
                     new MqttClientOptionsBuilder()
-                        .WithClientId("csharpTasker")
                         .WithCleanSession()
                         .WithTcpServer(mqttServerHost)
                         .Build()
