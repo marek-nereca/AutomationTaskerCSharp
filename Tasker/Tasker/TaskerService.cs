@@ -1,15 +1,9 @@
 using System;
-using System.Linq;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
-using Newtonsoft.Json;
 using Serilog;
-using Tasker.Models;
-using Tasker.Models.ActionMessages;
-using Tasker.Models.Configuration;
 
 namespace Tasker
 {
@@ -44,11 +38,22 @@ namespace Tasker
             var messages = await _mqttClient.CreateMessageStreamAsync(stoppingToken);
 
             var messagesWithState = MessageProcessor.CombineMqMessagesWithSensorState(messages, sensorStates);
-            var messageProcessingPipeline = _messageProcessor.CreateMessageProcessingPipeline(stoppingToken, messagesWithState);
-            _subscription = messageProcessingPipeline.Subscribe(action =>
-            {
-                action.Process(_actionProcessor);
-            });
+            var messageProcessingPipeline =
+                _messageProcessor.CreateMessageProcessingPipeline(stoppingToken, messagesWithState);
+            _subscription = messageProcessingPipeline
+                .Do(message => { }, exception => { _log.Error(exception, "Message processing pipeline failed."); })
+                .Retry()
+                .Subscribe(action =>
+                {
+                    try
+                    {
+                        action.Process(_actionProcessor);
+                    }
+                    catch (Exception e)
+                    {
+                        _log.Error(e, "Processing action {@action} failed.", action);
+                    }
+                }, exception => { _log.Fatal(exception, "Message processing pipeline failed."); });
         }
 
         public override Task StopAsync(CancellationToken cancellationToken)

@@ -44,10 +44,8 @@ namespace Tasker
         {
 
             var rfMessagesWithState = SelectRfMessages(messages);
-            rfMessagesWithState.Do(rf => { _log.Information("Rf Message received {@message}", rf); });
 
             var mqMessagesWithState = SelectMqMessages(messages);
-            mqMessagesWithState.Do(mq => { _log.Information("Mq message received {@message}", mq); });
 
             var switchActions = ResolveSwitchRequests(mqMessagesWithState, rfMessagesWithState);
 
