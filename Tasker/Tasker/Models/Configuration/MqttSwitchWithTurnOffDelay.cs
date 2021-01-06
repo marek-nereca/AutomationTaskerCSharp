@@ -1,7 +1,9 @@
 namespace Tasker.Models.Configuration
 {
-    public class MqttSwitchWithTurnOffDelay : MqttSwitch
+    public class MqttSwitchWithTurnOffDelay : MqttSwitch, ISwitchWithTurnOffDelay, ISwitchWithNightSelector
     {
-        public int TurnOffDelay { get; set; } = 0;
+        public int TurnOffDelayMs { get; set; }
+        public bool OnlyWhenIsDark { get; set; }
+        public bool OnlyWhenIsNight { get; set; }
     }
 }

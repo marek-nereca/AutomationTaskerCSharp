@@ -106,7 +106,7 @@ namespace Tasker.Tests
                         new MqttSwitchWithTurnOffDelay()
                         {
                             Topic = "/mqtt/on",
-                            TurnOffDelay = 0,
+                            TurnOffDelayMs = 0,
                             HueDevices = new[]
                             {
                                 new HueDevice

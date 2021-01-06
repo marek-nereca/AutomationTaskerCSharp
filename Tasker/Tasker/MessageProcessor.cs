@@ -14,11 +14,11 @@ namespace Tasker
     public class MessageProcessor
     {
         public const string RfTopic = "tasmota/tele/sonoff/RESULT";
-        
+
         private readonly DeviceConfig _deviceConfig;
-        
+
         private readonly ILogger _log;
-        
+
         private readonly ActionScheduler _actionScheduler;
 
         public MessageProcessor(ILogger log, DeviceConfig deviceConfig, ActionScheduler actionScheduler)
@@ -39,10 +39,10 @@ namespace Tasker
                 });
             return messagesWithState;
         }
-        
-        public IObservable<IActionMessage> CreateMessageProcessingPipeline(CancellationToken stoppingToken, IObservable<MqttStringMessageWithState> messages)
-        {
 
+        public IObservable<IActionMessage> CreateMessageProcessingPipeline(CancellationToken stoppingToken,
+            IObservable<MqttStringMessageWithState> messages)
+        {
             var rfMessagesWithState = SelectRfMessages(messages);
 
             var mqMessagesWithState = SelectMqMessages(messages);
@@ -51,17 +51,19 @@ namespace Tasker
 
             var turnOffActionsAfterDelay = new Subject<IActionMessage>();
             stoppingToken.Register(() => turnOffActionsAfterDelay.OnCompleted());
-            
-            var turnOnActions = ResolveTurnOnRequests(stoppingToken, rfMessagesWithState, turnOffActionsAfterDelay);
+
+            var turnOnActions = ResolveTurnOnRequests(stoppingToken, mqMessagesWithState, rfMessagesWithState,
+                turnOffActionsAfterDelay);
 
             var turnOffActions = ResolveTurnOffRequests(rfMessagesWithState);
 
             var actions = turnOffActions.Merge(switchActions).Merge(turnOnActions).Merge(turnOffActionsAfterDelay);
-            
+
             return actions;
         }
 
-        private IObservable<IActionMessage> ResolveTurnOffRequests(IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
+        private IObservable<IActionMessage> ResolveTurnOffRequests(
+            IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
         {
             var turnOffDevices = rfMessagesWithState.SelectMany(rf =>
                 _deviceConfig.OffSwitches.TasmotaRfSwitches
@@ -71,24 +73,35 @@ namespace Tasker
             return turnOffActions;
         }
 
-        private IObservable<IActionMessage> ResolveTurnOnRequests(CancellationToken stoppingToken, IObservable<TasmotaRfMessageWithState> rfMessagesWithState,
+        private IObservable<IActionMessage> ResolveTurnOnRequests(CancellationToken stoppingToken,
+            IObservable<MqttStringMessageWithState> mqMessagesWithState,
+            IObservable<TasmotaRfMessageWithState> rfMessagesWithState,
             Subject<IActionMessage> turnOffActionsAfterDelay)
         {
-            var turnOnSwitches = rfMessagesWithState.SelectMany(rfm =>
+
+            var turnOnMqSwitches = mqMessagesWithState.SelectMany(mqMessage =>
+                _deviceConfig.OnSwitches.MqttSwitches.Where(
+                    mqSwitch => mqSwitch.MeetTopicAndPayloadFilter(mqMessage.Message) &&
+                                mqSwitch.MeetDayAndDarkFilter(mqMessage.SensorState)
+                ));
+
+            var turnOnRfSwitches = rfMessagesWithState.SelectMany(rfMessage =>
                 _deviceConfig.OnSwitches.TasmotaRfSwitches.Where(rfSwitch =>
-                    rfm.Message.RfReceived.Data == rfSwitch.RfData &&
-                    (!rfSwitch.OnlyWhenIsDark || rfm.SensorState.IsDark) &&
-                    (!rfSwitch.OnlyWhenIsNight || !rfm.SensorState.IsDayLight)
-                    ));
+                    rfMessage.Message.RfReceived.Data == rfSwitch.RfData &&
+                    rfSwitch.MeetDayAndDarkFilter(rfMessage.SensorState)
+                ));
+            
+            var turnOnSwitches = turnOnMqSwitches.Select(mqs => (ISwitchWithTurnOffDelay) mqs).Merge(turnOnRfSwitches);
             var turnOnDevices = turnOnSwitches.SelectMany(sw => sw.HueDevices);
             var turnOnActions = turnOnDevices.Select(device => new TurnOnDevice(device) as IActionMessage);
 
-            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelayMs > 0 && sw.HueDevices.Length != 0).SelectMany(sw =>
-                sw.HueDevices.Select(device => new
-                {
-                    TurnOffDelay = sw.TurnOffDelayMs,
-                    Device = device
-                }));
+            var turnOffAfterDelay = turnOnSwitches.Where(sw => sw.TurnOffDelayMs > 0 && sw.HueDevices.Length != 0)
+                .SelectMany(sw =>
+                    sw.HueDevices.Select(device => new
+                    {
+                        TurnOffDelay = sw.TurnOffDelayMs,
+                        Device = device
+                    }));
             turnOffAfterDelay.Subscribe(definition =>
             {
                 var task = _actionScheduler.RegisterAction(
@@ -100,10 +113,12 @@ namespace Tasker
             return turnOnActions;
         }
 
-        private IObservable<IActionMessage> ResolveSwitchRequests(IObservable<MqttStringMessageWithState> mqMessagesWithState, IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
+        private IObservable<IActionMessage> ResolveSwitchRequests(
+            IObservable<MqttStringMessageWithState> mqMessagesWithState,
+            IObservable<TasmotaRfMessageWithState> rfMessagesWithState)
         {
             var hueDevicesToSwitchMq = mqMessagesWithState.SelectMany(mq =>
-                _deviceConfig.SimpleSwitches.MqttSwitches.Where(mqSwitch => mqSwitch.Topic == mq.Message.Topic)
+                _deviceConfig.SimpleSwitches.MqttSwitches.Where(mqSwitch => mqSwitch.MeetTopicAndPayloadFilter(mq.Message))
                     .SelectMany(mqSwitch => mqSwitch.HueDevices));
             var hueDevicesToSwitchRf = rfMessagesWithState.SelectMany(rf =>
                 _deviceConfig.SimpleSwitches.TasmotaRfSwitches
@@ -114,18 +129,21 @@ namespace Tasker
             return switchActions;
         }
 
-        private static IObservable<TasmotaRfMessageWithState> SelectRfMessages(IObservable<MqttStringMessageWithState> messages)
+        private static IObservable<TasmotaRfMessageWithState> SelectRfMessages(
+            IObservable<MqttStringMessageWithState> messages)
         {
             var rfMessages = messages.Where(msgWrapper => msgWrapper.Message.Topic == RfTopic).SelectMany(
                 message =>
-                    Observable.Return(new TasmotaRfMessageWithState {
+                    Observable.Return(new TasmotaRfMessageWithState
+                    {
                         Message = JsonConvert.DeserializeObject<TasmotaRfMessage>(message.Message.Payload),
                         SensorState = message.SensorState
                     }));
             return rfMessages;
         }
 
-        private static IObservable<MqttStringMessageWithState> SelectMqMessages(IObservable<MqttStringMessageWithState> messages)
+        private static IObservable<MqttStringMessageWithState> SelectMqMessages(
+            IObservable<MqttStringMessageWithState> messages)
         {
             var mqMessages = messages.Where(msgWrapper => msgWrapper.Message.Topic != RfTopic);
             return mqMessages;
